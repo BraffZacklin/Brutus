@@ -1,3 +1,4 @@
+#!/bin/env/python 3
 import argparse
 from os.path import exists, isdir
 from Wordlist import wordlist
@@ -5,6 +6,7 @@ from Wordlist import wordlist
 parser = argparse.ArgumentParser()
 parser.add_argument('input', help='Read input from string or file')
 parser.add_argument('-v', '--verbose', dest='verbose', action='store_true', help='Enable verbose logging')
+parser.add_argument('-s', '--skim', dest='skim', help='Skim first X words from wordlist', type=int, default=0, action='store')
 args = parser.parse_args()
 
 if args.verbose == True:
@@ -23,9 +25,8 @@ else:
 
 def readInput(argument):
 	cipher_list = []
-	if isdir(argument):
-		if exists(argument):
-			with open(argument, 'r') as file:
+	if exists(argument):
+		with open(argument, 'r') as file:
 				temp = file.read().split(' ')
 	else:
 		temp = argument.split(' ')
@@ -53,11 +54,14 @@ def rot(input, key):
 			cypher_text += char
 	return cypher_text
 
-def findByLen(list, length):
+def findByLen(list, length, skim):
 	matches = []
 	for item in list:
 		if len(item) == length:
-			matches.append(item)
+			if len(matches) < skim or skim == 0:
+				matches.append(item)
+			else:
+				return matches
 	return matches
 
 def makeUniform(string):
@@ -74,11 +78,11 @@ def longestString(list):
 			length = len(item)
 	return length
 
-def crackCipher(cipher_list, cipher_index, wordlist, wordlist_index, key, length, max_len):
-	cipher_targets = findByLen(cipher_list, length)
+def crackCipher(cipher_list, cipher_index, wordlist, wordlist_index, key, length, max_len, skim):
+	cipher_targets = findByLen(cipher_list, length, 0)
 	if len(cipher_targets) == 0:
-		return (cipher_list, cipher_index, wordlist, wordlist_index, key, length + 1, max_len)
-	wordlist_guesses = findByLen(wordlist, length)
+		return (cipher_list, cipher_index, wordlist, wordlist_index, key, length + 1, max_len, skim)
+	wordlist_guesses = findByLen(wordlist, length, skim)
 
 	verbose_out(0, f'Trying Bruteforce with settings cipher_index = {cipher_index}, wordlist_index = {wordlist_index}, key = {key}, length = {length}')
 	attempt = rot(makeUniform(wordlist_guesses[wordlist_index]), key)
@@ -89,33 +93,33 @@ def crackCipher(cipher_list, cipher_index, wordlist, wordlist_index, key, length
 		return key
 
 	elif cipher_index < len(cipher_targets) - 1:
-		return (cipher_list, cipher_index + 1, wordlist, wordlist_index, key, length, max_len)
+		return (cipher_list, cipher_index + 1, wordlist, wordlist_index, key, length, max_len, skim)
 
 	elif wordlist_index < len(wordlist_guesses) - 1:
-		return (cipher_list, 0, wordlist, wordlist_index + 1, key, length, max_len)
+		return (cipher_list, 0, wordlist, wordlist_index + 1, key, length, max_len, skim)
 
 	elif key < 25:
-		return (cipher_list, 0, wordlist, 0, key + 1, length, max_len)
+		return (cipher_list, 0, wordlist, 0, key + 1, length, max_len, skim)
 
 	elif length < max_len:
-		return (cipher_list, 0, wordlist, 0, 0, length + 1, max_len)
+		return (cipher_list, 0, wordlist, 0, 0, length + 1, max_len, skim)
 
 	else:
 		return None
 
 cipher_list = readInput(args.input)
 max_len = longestString(cipher_list)
-key = (cipher_list, 0, wordlist, 0, 0, 1, max_len)
+skim = args.skim
+key = (cipher_list, 0, wordlist, 0, 0, 1, max_len, skim)
 
-while type(key) != int:
+while type(key) != int and key != None:
 	key = crackCipher(*key)
-	if type(key) == None:
-		break
 
 if key == None:
 	print("Could not find the cipher key")
 elif key != None:
 	print("Key found!")
+	print(f'\tKey = {key}')
 	verbose_out(0, f'Decrypting text...')
 	decrypted_text = rot(args.input, key)
-	print(f'Decrypted text:\n{decrypted_text}')
+	print(f'Decrypted text:\n\t{decrypted_text}')
